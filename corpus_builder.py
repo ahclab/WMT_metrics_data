@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[11]:
 
 
 import data_downloader
@@ -9,20 +9,10 @@ import tempfile
 import os
 import sys
 from logging import getLogger
-logger = getLogger(__name__)
-
-
-# In[ ]:
-
-
-class Arguments():
-    self.__init__(self, download_path, cache_path, years, dev_ratio=0.1):
-        self.download_path = download_path
-        self.cache_path = cache_path
-        self.years = years
-        self.dev_ratio = self.dev_ratio
-        
-    
+import shutil
+import pandas as pd
+import argparse
+logger = data_downloader.logger
 
 
 # In[ ]:
@@ -38,82 +28,141 @@ WMT_IMPORTERS = {
 }
 
 
-# In[ ]:
+# In[12]:
 
 
-download_path = '/home/is/kosuke-t/Downloads/bleurt/bleurt/wmt/data'
-cache_path = '/home/is/kosuke-t/Downloads/bleurt/bleurt/wmt/cache'
-years = ["15", "16", "17", "18", "19", "20"]
-dev_ratio = 0.0
-target_filename = 'wmt15-20_DA_MQM_json'
+def bool_flag(s):
+    """
+    Parse boolean arguments from the command line.
+    """
+    FALSY_STRINGS = {'off', 'false', '0'}
+    TRUTHY_STRINGS = {'on', 'true', '1'}
+    if s.lower() in FALSY_STRINGS:
+        return False
+    elif s.lower() in TRUTHY_STRINGS:
+        return True
+    else:
+        raise argparse.ArgumentTypeError("Invalid value for a boolean flag!")
+        
+parser = argparse.ArgumentParser()
 
-target_path = os.path.join(download_path, target_filename)
+# path settings
+parser.add_argument('--target_path', type=str, default='/home/is/kosuke-t/scripts/make_data/wmt_metrics_data/data/wmt15-20_DA.json')
+parser.add_argument('--cache_path', type=str, default='/home/is/kosuke-t/scripts/make_data/wmt_metrics_data')
+parser.add_argument('--downloaded_dir', type=str, default='/home/is/kosuke-t/scripts/make_data/wmt_metrics_data/cache',
+                    help='for WMT20 submissions data. Must be specified when targeting WMT20')
 
-args = Arguments(target_path=target_path, 
-                 cache_path=cache_path, 
-                 years=years, 
-                 dev_ratio=dev_ratio)
+# others
+parser.add_argument('--years', type=str, default='15,16,17,18,19,20', help='separation must be given by \",\"')
+parser.add_argument('--target_language', type=str, default='*', help='if only english, then \"en\"')
+parser.add_argument('--include_unreliables', type=bool_flag, default=False,
+                    help='WMT20 has some unreliable data. This flag is set when including such data')
+parser.add_argument('--onlyMQM', type=bool_flag, default=False, 
+                    help='only download and preprocessing MQM data. When both of onlyMQM and onlyPSQM are False, download DA data on WMT20')
+parser.add_argument('--onlyPSQM', type=bool_flag, default=False, 
+                    help='only download and preprocessing PSQM data. When both of onlyMQM and onlyPSQM are False, download DA data on WMT20')
+parser.add_argument('--addMQM', type=bool_flag, default=False, help='build DA and MQM mixed data')
+parser.add_argument('--addPSQM', type=bool_flag, default=False, help='build DA and PSQM mixed data')
+parser.add_argument('--average_duplicates', type=bool_flag, default=True, 
+                    help='Whether to take average of the scores annotated to the same sentences')
+parser.add_argument('--prevent_leaks', type=bool_flag, default=True, help='whether to allow for leaks among train and dev')
+parser.add_argument('--dev_ratio', type=float, default=0.1, help='development ratio')
+
+args = parser.parse_args()
+args.years = args.years.split(',')
+
+if args.addMQM:
+    assert (not args.onlyMQM) and (not args.onlyPSQM) and (not args.addPSQM) ,    'addMQM can stand only when other signals are off'
+if args.addPSQM:
+    assert (not args.onlyMQM) and (not args.onlyPSQM) and (not args.addMQM) ,    'addPSQM can stand only when other signals are off' 
+
+if '20' in args.years:
+    assert os.path.isdir(args.downloaded_dir), 'Fetching 20\'s data cannot be completed with this script.\n'    'Download submission data from {} beforhand.\n'    'Then, put the data folder inside the downloaded_dir of the arguments.'.format(data_downloader.WMT_LOCATIONS['20']['submissions'][-1])
 
 
-# In[ ]:
+# In[15]:
 
 
 def create_wmt_dataset(target_file, rating_years, target_language):
     """Creates a JSONL file for a given set of years and a target language."""
-    logging.info("*** Downloading ratings data from WMT.")
+    logger.info("*** Downloading ratings data from WMT.")
     assert target_file
-    assert not os.path.exists(args.target_file), "Target file already exists. Aborting."
+    assert not os.path.exists(args.target_path), "Target file already exists. Aborting."
     assert rating_years, "No target year detected."
     for year in rating_years:
         assert year in WMT_IMPORTERS, "No importer for year {}.".format(year)
     assert target_language
     assert target_language == "*" or len(target_language) == 2, "target_language must be a two-letter language code or `*`."
-
-    with tempfile.TemporaryDirectory(dir=args.temp_directory) as tmpdir:
-        logging.info("Using tmp directory: {}".format(tmpdir))
-
+    
+    with tempfile.TemporaryDirectory(dir=args.cache_path) as tmpdir:
+        logger.info("Using tmp directory: {}".format(tmpdir))
+        args.cache_path = tmpdir
         n_records_total = 0
-        for year in rating_years:
-            logging.info("\nProcessing ratings for year {}".format(year))
-            tmp_file = os.path.join(tmpdir, "tmp_ratings.json")
-
+        tmp_file = os.path.join(tmpdir, "tmp_ratings.json")
+        
+        if '20' in rating_years:
+            logger.info('copying 20\'s data to tmp directory...')
+            before_copy = os.path.join(args.downloaded_dir, data_downloader.WMT_LOCATIONS['20']['submissions'][0])
+            after_copy = os.path.join(tmpdir, data_downloader.WMT_LOCATIONS['20']['submissions'][0])
+            shutil.copytree(before_copy, after_copy)
+            logger.info('Done.')
+        
+        def fetch_and_generate(n_records_total):
             # Builds an importer.
             importer_class = WMT_IMPORTERS[year]
-            importer = importer_class(year, tmpdir, tmp_file)
+            if year != '20':
+                importer = importer_class(year, tmp_file, tmpdir, args)
+            else:
+                importer = importer_class(year, tmp_file, tmpdir, args, args.include_unreliables, args.onlyMQM, args.onlyPSQM)
             importer.fetch_files()
             lang_pairs = importer.list_lang_pairs()
-            logging.info("Lang pairs found:")
-            logging.info(" ".join(lang_pairs))
+            logger.info("Lang pairs found:")
+            logger.info(" ".join(lang_pairs))
 
             for lang_pair in lang_pairs:
 
                 if target_language != "*" and not lang_pair.endswith(target_language):
-                    logging.info("Skipping language pair {}".format(lang_pair))
+                    logger.info("Skipping language pair {}".format(lang_pair))
                     continue
 
-                logging.info("Generating records for {} and language pair {}".format(year, lang_pair))
+                logger.info("Generating records for {} and language pair {}".format(year, lang_pair))
                 n_records = importer.generate_records_for_lang(lang_pair)
-                logging.info("Imported {} records.".format(str(n_records)))
                 n_records_total += n_records
+            return n_records_total
+        
+        for year in rating_years:
+            logger.info("\nProcessing ratings for year {}".format(year))
+            
+            if year == '20' and args.addMQM:
+                n_records_total = fetch_and_generate(n_records_total)
+                args.onlyMQM = True
+                n_records_total = fetch_and_generate(n_records_total)
+            elif year == '20' and args.addPSQM:
+                n_records_total = fetch_and_generate(n_records_total)
+                args.onlyPSQM = True
+                n_records_total = fetch_and_generate(n_records_total)
+            else:
+                n_records_total = fetch_and_generate(n_records_total)
 
-    logging.info("Done processing {} elements".format(n_records_total))
-    logging.info("Copying temp file...")
-    tf.io.gfile.copy(tmp_file, target_file, overwrite=True)
-    logging.info("Done.")
+        logger.info("Done processing {} elements".format(n_records_total))
+        logger.info("Copying temp file...")
+        shutil.copyfile(tmp_file, target_file)
+        logger.info("Done.")
 
 
-# In[ ]:
+# In[16]:
 
 
 def postprocess(target_file, remove_null_refs=True, average_duplicates=True):
     """Postprocesses a JSONL file of ratings downloaded from WMT."""
-    logging.info("\n*** Post-processing WMT ratings {}.".format(target_file))
-    assert tf.io.gfile.exists(target_file), "WMT ratings file not found!"
+    logger.info("\n*** Post-processing WMT ratings {}.".format(target_file))
     base_file = target_file + "_raw"
-    tf.io.gfile.rename(target_file, base_file, overwrite=True)
+    if not os.path.isfile(base_file):
+        assert os.path.isfile(target_file), "WMT ratings file not found!"
+        os.replace(target_file, base_file)
 
-    logging.info("Reading and processing wmt data...")
-    with tf.io.gfile.GFile(base_file, "r") as f:
+    logger.info("Reading and processing wmt data...")
+    with open(base_file, "r") as f:
         ratings_df = pd.read_json(f, lines=True)
     # ratings_df = ratings_df[["lang", "reference", "candidate", "rating"]]
     ratings_df.rename(columns={"rating": "score"}, inplace=True)
@@ -123,16 +172,19 @@ def postprocess(target_file, remove_null_refs=True, average_duplicates=True):
         assert not ratings_df.empty
 
     if average_duplicates:
-        ratings_df = ratings_df.groupby(by=["lang", "source", "candidate", "reference"]).agg({"score": "mean",}).reset_index()
+        try:
+            ratings_df = ratings_df.groupby(by=["lang", "source", "candidate", "reference"]).agg({"score": "mean",}).reset_index()
+        except:
+            logger.info('No duplicates.')
 
-    logging.info("Saving clean file.")
-    with tf.io.gfile.GFile(target_file, "w+") as f:
+    logger.info("Saving clean file.")
+    with open(target_file, "w+") as f:
         ratings_df.to_json(f, orient="records", lines=True)
-    logging.info("Cleaning up old ratings file.")
-    tf.io.gfile.remove(base_file)
+    logger.info("Cleaning up old ratings file.")
+    os.remove(base_file)
 
 
-# In[ ]:
+# In[17]:
 
 
 def _shuffle_no_leak(all_ratings_df, n_train):
@@ -158,7 +210,7 @@ def _shuffle_no_leak(all_ratings_df, n_train):
     while is_split_leaky(split_ix):
         split_ix += 1
     if n_train != split_ix:
-        logging.info("Moved split point from {} to {} to prevent sentence leaking".format(n_train, split_ix))
+        logger.info("Moved split point from {} to {} to prevent sentence leaking".format(n_train, split_ix))
 
     # Shuffles the train and dev sets separately.
     train_ratings_df = all_ratings_df.iloc[:split_ix].copy()
@@ -170,13 +222,13 @@ def _shuffle_no_leak(all_ratings_df, n_train):
     # Checks that there is no leakage.
     train_sentences = train_ratings_df.reference.unique()
     dev_sentences = dev_ratings_df.reference.unique()
-    tf.logging.info("Using {} and {} unique sentences for train and dev.".format(len(train_sentences), len(dev_sentences)))
+    logger.info("Using {} and {} unique sentences for train and dev.".format(len(train_sentences), len(dev_sentences)))
     assert not bool(set(train_sentences) & set(dev_sentences))
 
     return train_ratings_df, dev_ratings_df
 
 
-# In[ ]:
+# In[18]:
 
 
 def _shuffle_leaky(all_ratings_df, n_train):
@@ -189,7 +241,7 @@ def _shuffle_leaky(all_ratings_df, n_train):
     return train_ratings_df, dev_ratings_df
 
 
-# In[ ]:
+# In[19]:
 
 
 def shuffle_split(ratings_file,
@@ -198,44 +250,50 @@ def shuffle_split(ratings_file,
                   dev_ratio=.1,
                   prevent_leaks=True):
     """Splits a JSONL WMT ratings file into train/dev."""
-    logging.info("\n*** Splitting WMT data in train/dev.")
+    logger.info("\n*** Splitting WMT data in train/dev.")
 
-    assert tf.io.gfile.exists(ratings_file), "WMT ratings file not found!"
+    assert os.path.isfile(ratings_file), "WMT ratings file not found!"
     base_file = ratings_file + "_raw"
-    tf.io.gfile.rename(ratings_file, base_file, overwrite=True)
+    os.replace(ratings_file, base_file)
 
-    logging.info("Reading wmt data...")
-    with tf.io.gfile.GFile(base_file, "r") as f:
-    ratings_df = pd.read_json(f, lines=True)
+    logger.info("Reading wmt data...")
+    with open(base_file, "r") as f:
+        ratings_df = pd.read_json(f, lines=True)
 
-    logging.info("Doing the shuffle / split.")
+    logger.info("Doing the shuffle / split.")
     n_rows, n_train = len(ratings_df), int((1 - dev_ratio) * len(ratings_df))
-    logging.info("Will attempt to set aside {} out of {} rows for dev.".format(n_rows - n_train, n_rows))
+    logger.info("Will attempt to set aside {} out of {} rows for dev.".format(n_rows - n_train, n_rows))
     if prevent_leaks:
         train_df, dev_df = _shuffle_no_leak(ratings_df, n_train)
     else:
         train_df, dev_df = _shuffle_leaky(ratings_df, n_train)
-    logging.info("Created train and dev files with {} and {} records.".format(len(train_df), len(dev_df)))
+    logger.info("Created train and dev files with {} and {} records.".format(len(train_df), len(dev_df)))
 
-    logging.info("Saving clean file.")
+    logger.info("Saving clean file.")
     if not train_file:
         train_file = ratings_file + "_train"
-    with tf.io.gfile.GFile(train_file, "w+") as f:
+    with open(train_file, "w+") as f:
         train_df.to_json(f, orient="records", lines=True)
     if not dev_file:
         dev_file = ratings_file + "_dev"
-    with tf.io.gfile.GFile(dev_file, "w+") as f:
+    with open(dev_file, "w+") as f:
         dev_df.to_json(f, orient="records", lines=True)
 
-    logging.info("Cleaning up old ratings file.")
-    tf.io.gfile.remove(base_file)
+    logger.info("Cleaning up old ratings file.")
+    os.remove(base_file)
+
+
+# In[20]:
+
+
+create_wmt_dataset(args.target_path, args.years, args.target_language)
+postprocess(args.target_path, average_duplicates=args.average_duplicates)
+if args.dev_ratio > 0.0:
+    shuffle_split(args.target_path, dev_ratio=args.dev_ratio, prevent_leaks=args.prevent_leaks)
 
 
 # In[ ]:
 
 
-create_wmt_dataset(args.target_file, args.rating_years, args.target_language)
-postprocess(args.target_file, average_duplicates=args.average_duplicates)
-if args.dev_ratio:
-    shuffle_split(args.target_file, dev_ratio=args.dev_ratio, prevent_leaks=args.prevent_leaks)
+
 

@@ -13,6 +13,7 @@ import re
 import shutil
 import tarfile
 import urllib
+import urllib.request
 import subprocess
 from sklearn import preprocessing
 import numpy as np
@@ -719,9 +720,9 @@ class Importer19(Importer18):
 class Importer20(Importer18):
     """Importer for WMT20 Metrics challenge."""
     
-    def __init__(self, year, target_path, cache_path, args, include_unlilables, onlyMQM=False, onlyPSQM=False):
+    def __init__(self, year, target_path, cache_path, args, include_unreliables, onlyMQM=False, onlyPSQM=False):
         super(Importer20, self).__init__(year, target_path, cache_path, args)
-        self.include_unlilables = include_unlilables
+        self.include_unreliables = include_unreliables
         self.onlyMQM = onlyMQM
         self.onlyPSQM = onlyPSQM
         assert not (onlyMQM and onlyPSQM), "only one of onlyMQM or onlyPSQM can stand"
@@ -1124,7 +1125,7 @@ class Importer20(Importer18):
         n_records = 0
         skipped_n_records = 0
         
-        if lang in ['en-zh', 'en-ja', 'en-iu', 'en-cs', 'en-ta', 'en-ru', 'en-de', 'en-pl'] and (not self.include_unlilables):
+        if lang in ['en-zh', 'en-ja', 'en-iu', 'en-cs', 'en-ta', 'en-ru', 'en-de', 'en-pl'] and (not self.include_unreliables):
             return 0
         
         with open(ratings_file_path, "r", encoding="utf-8") as f_ratings:
@@ -1200,7 +1201,7 @@ class Importer20(Importer18):
 #                       '/home/is/kosuke-t/scripts/make_data/wmt_metrics_data/data/wmt2020_mqm.json', 
 #                       '/home/is/kosuke-t/scripts/make_data/wmt_metrics_data/cache',
 #                       args=None,
-#                       include_unlilables=False,
+#                       include_unreliables=False,
 #                       onlyMQM=True, 
 #                       onlyPSQM=False)
 
