@@ -12,3 +12,9 @@ python corpus_builder.py [arguments]
 --downloaded_dir
 ...
 check out the help of the arguments
+
+# Downloading WMT20
+The source, reference and system translations are only available from the google drive folder.
+[WMT20_data](https://drive.google.com/drive/folders/1n_alr6WFQZfw4dcAmyxow4V8FC67XD8p)
+It's not downloadable from the script.
+You must prepare the folder in the --downloaded_dir beforehand.
