@@ -271,11 +271,11 @@ def shuffle_split(ratings_file,
 
     logger.info("Saving clean file.")
     if not train_file:
-        train_file = ratings_file + "_train"
+        train_file = ratings_file.replace(".json", "_train.json")
     with open(train_file, "w+") as f:
         train_df.to_json(f, orient="records", lines=True)
     if not dev_file:
-        dev_file = ratings_file + "_dev"
+        dev_file = ratings_file.replace(".json", "_dev.json")
     with open(dev_file, "w+") as f:
         dev_df.to_json(f, orient="records", lines=True)
 
