@@ -296,17 +296,29 @@ def shuffle_split(ratings_file,
     
     logger.info("Saving clean file.")
     if not train_file:
-        train_file = ratings_file.replace(".json", "_train.json")
+        if addMQM:
+            train_file = ratings_file.replace(".json", "_addMQM_train.json")
+        elif addPSQM:
+            train_file = ratings_file.replace(".json", "_addPSQM_train.json")
+        else:
+            train_file = ratings_file.replace(".json", "_train.json")
     with open(train_file, "w+") as f:
         train_df.to_json(f, orient="records", lines=True)
     if not dev_file:
-        dev_file = ratings_file.replace(".json", "_dev.json")
+        if addMQM:
+            dev_file = ratings_file.replace(".json", "_addMQM_dev.json")
+        elif addPSQM:
+            dev_file = ratings_file.replace(".json", "_addPSQM_dev.json")
+        else:
+            dev_file = ratings_file.replace(".json", "_dev.json")
     with open(dev_file, "w+") as f:
         dev_df.to_json(f, orient="records", lines=True)
 
     logger.info("Cleaning up old ratings file.")
     logger.info("Created train and dev files with {} and {} records.".format(len(train_df), len(dev_df)))
     os.remove(base_file)
+    if addMQM or addPSQM:
+        os.remove(ratings_file) 
 
 
 # In[ ]:
