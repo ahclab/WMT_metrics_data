@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[11]:
+# In[21]:
 
 
 import data_downloader
@@ -15,7 +15,7 @@ import argparse
 logger = data_downloader.logger
 
 
-# In[ ]:
+# In[22]:
 
 
 WMT_IMPORTERS = {
@@ -28,7 +28,7 @@ WMT_IMPORTERS = {
 }
 
 
-# In[12]:
+# In[ ]:
 
 
 def bool_flag(s):
@@ -113,7 +113,12 @@ def create_wmt_dataset(target_file, rating_years, target_language):
             if year != '20':
                 importer = importer_class(year, tmp_file, tmpdir, args)
             else:
-                importer = importer_class(year, tmp_file, tmpdir, args, args.include_unreliables, args.onlyMQM, args.onlyPSQM)
+                if args.addMQM and args.onlyMQM:
+                    importer = importer_class(year, tmp_file.replace('.json', '_addMQM.json'), tmpdir, args, args.include_unreliables, args.onlyMQM, args.onlyPSQM)
+                elif args.addPSQM and args.onlyPSQM:
+                    importer = importer_class(year, tmp_file.replace('.json', '_addPSQM.json'), tmpdir, args, args.include_unreliables, args.onlyMQM, args.onlyPSQM)
+                else:
+                    importer = importer_class(year, tmp_file, tmpdir, args, args.include_unreliables, args.onlyMQM, args.onlyPSQM)
             importer.fetch_files()
             lang_pairs = importer.list_lang_pairs()
             logger.info("Lang pairs found:")
@@ -134,10 +139,12 @@ def create_wmt_dataset(target_file, rating_years, target_language):
             logger.info("\nProcessing ratings for year {}".format(year))
             
             if year == '20' and args.addMQM:
+                args.onlyMQM = False
                 n_records_total = fetch_and_generate(n_records_total)
                 args.onlyMQM = True
                 n_records_total = fetch_and_generate(n_records_total)
             elif year == '20' and args.addPSQM:
+                args.onlyPSQM = False
                 n_records_total = fetch_and_generate(n_records_total)
                 args.onlyPSQM = True
                 n_records_total = fetch_and_generate(n_records_total)
@@ -147,6 +154,10 @@ def create_wmt_dataset(target_file, rating_years, target_language):
         logger.info("Done processing {} elements".format(n_records_total))
         logger.info("Copying temp file...")
         shutil.copyfile(tmp_file, target_file)
+        if args.addMQM:
+            shutil.copyfile(tmp_file.replace('.json', '_addMQM.json'), target_file.replace('.json', '_addMQM.json'))
+        elif args.addPSQM:
+            shutil.copyfile(tmp_file.replace('.json', '_addPSQM.json'), target_file.replace('.json', '_addPSQM.json'))
         logger.info("Done.")
 
 
@@ -248,13 +259,23 @@ def shuffle_split(ratings_file,
                   train_file=None,
                   dev_file=None,
                   dev_ratio=.1,
-                  prevent_leaks=True):
+                  prevent_leaks=True, 
+                  addMQM=False, 
+                  addPSQM=False):
     """Splits a JSONL WMT ratings file into train/dev."""
     logger.info("\n*** Splitting WMT data in train/dev.")
 
     assert os.path.isfile(ratings_file), "WMT ratings file not found!"
-    base_file = ratings_file + "_raw"
-    os.replace(ratings_file, base_file)
+    if addMQM:
+        base_file = ratings_file.replace('.json', '_addMQM.json') + "_raw"
+        os.replace(ratings_file.replace('.json', '_addMQM.json'), base_file)
+    elif addPSQM:
+        base_file = ratings_file.replace('.json', '_addPSQM.json') + "_raw"
+        os.replace(ratings_file.replace('.json', '_addPSQM.json'), base_file)
+    else:
+        base_file = ratings_file + "_raw"
+        os.replace(ratings_file, base_file)
+        
 
     logger.info("Reading wmt data...")
     with open(base_file, "r") as f:
@@ -267,8 +288,12 @@ def shuffle_split(ratings_file,
         train_df, dev_df = _shuffle_no_leak(ratings_df, n_train)
     else:
         train_df, dev_df = _shuffle_leaky(ratings_df, n_train)
-    logger.info("Created train and dev files with {} and {} records.".format(len(train_df), len(dev_df)))
-
+    logger.info("Split train and dev files with {} and {} records.".format(len(train_df), len(dev_df)))
+    if addMQM or addPSQM:
+        with open(ratings_file, 'r') as f:
+            subject_df = pd.read_json(f, lines=True)
+        train_df = pd.concat([subject_df, train_df]).reset_index()
+    
     logger.info("Saving clean file.")
     if not train_file:
         train_file = ratings_file.replace(".json", "_train.json")
@@ -280,16 +305,21 @@ def shuffle_split(ratings_file,
         dev_df.to_json(f, orient="records", lines=True)
 
     logger.info("Cleaning up old ratings file.")
+    logger.info("Created train and dev files with {} and {} records.".format(len(train_df), len(dev_df)))
     os.remove(base_file)
 
 
-# In[20]:
+# In[ ]:
 
 
 create_wmt_dataset(args.target_path, args.years, args.target_language)
 postprocess(args.target_path, average_duplicates=args.average_duplicates)
+if args.addMQM:
+    postprocess(args.target_path.replace('.json', '_addMQM.json'), average_duplicates=args.average_duplicates)
+elif args.PSMQM:
+    postprocess(args.target_path.replace('.json', '_addPSQM.json'), average_duplicates=args.average_duplicates)
 if args.dev_ratio > 0.0:
-    shuffle_split(args.target_path, dev_ratio=args.dev_ratio, prevent_leaks=args.prevent_leaks)
+    shuffle_split(args.target_path, dev_ratio=args.dev_ratio, prevent_leaks=args.prevent_leaks, addMQM=args.addMQM, addPSQM=args.addPSQM)
 
 
 # In[ ]:
