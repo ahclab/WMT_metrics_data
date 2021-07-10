@@ -251,7 +251,7 @@ class Importer1516(WMTImporter):
                 return n_records
 
 
-# In[35]:
+# In[6]:
 
 
 class Importer17(WMTImporter):
@@ -421,7 +421,7 @@ class Importer17(WMTImporter):
         return n_records
 
 
-# In[36]:
+# In[7]:
 
 
 class Importer18(WMTImporter):
@@ -603,7 +603,7 @@ class Importer18(WMTImporter):
         return n_records
 
 
-# In[37]:
+# In[8]:
 
 
 class Importer19(Importer18):
@@ -714,7 +714,7 @@ class Importer19(Importer18):
         return sys_segments
 
 
-# In[52]:
+# In[9]:
 
 
 class Importer20(Importer18):
@@ -1194,7 +1194,7 @@ class Importer20(Importer18):
     
 
 
-# In[60]:
+# In[12]:
 
 
 # importer = Importer20('20', 
@@ -1202,7 +1202,7 @@ class Importer20(Importer18):
 #                       '/home/is/kosuke-t/scripts/make_data/wmt_metrics_data/cache',
 #                       args=None,
 #                       include_unreliables=False,
-#                       onlyMQM=True, 
+#                       onlyMQM=False, 
 #                       onlyPSQM=False)
 
 
@@ -1212,11 +1212,11 @@ class Importer20(Importer18):
 # importer.fetch_files()
 
 
-# In[61]:
+# In[14]:
 
 
 # for lang in importer.list_lang_pairs():
-#     n_records = importer.generate_records_for_lang(lang)
+#     print(lang)
 
 
 # In[59]:
