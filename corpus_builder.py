@@ -328,7 +328,7 @@ create_wmt_dataset(args.target_path, args.years, args.target_language)
 postprocess(args.target_path, average_duplicates=args.average_duplicates)
 if args.addMQM:
     postprocess(args.target_path.replace('.json', '_addMQM.json'), average_duplicates=args.average_duplicates)
-elif args.PSMQM:
+elif args.addPSMQM:
     postprocess(args.target_path.replace('.json', '_addPSQM.json'), average_duplicates=args.average_duplicates)
 if args.dev_ratio > 0.0:
     shuffle_split(args.target_path, dev_ratio=args.dev_ratio, prevent_leaks=args.prevent_leaks, addMQM=args.addMQM, addPSQM=args.addPSQM)
