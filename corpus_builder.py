@@ -66,6 +66,7 @@ parser.add_argument('--addPSQM', type=bool_flag, default=False, help='build DA a
 parser.add_argument('--average_duplicates', type=bool_flag, default=True, 
                     help='Whether to take average of the scores annotated to the same sentences')
 parser.add_argument('--prevent_leaks', type=bool_flag, default=True, help='whether to allow for leaks among train and dev')
+parser.add_argument('--use_avg_seg_scores', type=bool_flag, default=True, help='whether to use 20\'s averaged seg scores or z-standardized')
 parser.add_argument('--dev_ratio', type=float, default=0.1, help='development ratio')
 
 args = parser.parse_args()

@@ -725,6 +725,7 @@ class Importer20(Importer18):
         self.include_unreliables = include_unreliables
         self.onlyMQM = onlyMQM
         self.onlyPSQM = onlyPSQM
+        self.args = args
         assert not (onlyMQM and onlyPSQM), "only one of onlyMQM or onlyPSQM can stand"
     
     def open_tar(self, tar_path, open_dir):
@@ -946,7 +947,7 @@ class Importer20(Importer18):
                     seg_scores[sys_id]['target'].append(target)
         for sys_id in seg_scores.keys():
             seg_scores[sys_id]['z_mean_score'] = np.mean(seg_scores[sys_id]['z_score'])
-        
+            
         return rater_score, seg_scores
                 
     def get_mqm_avg_segments(self, lang, seg_scores):
@@ -1104,6 +1105,22 @@ class Importer20(Importer18):
         
         return n_records
     
+    def to_json(self, year, lang, src_segment, ref_segment, sys_segment,
+                raw_score, z_score, seg_id, sys_name, n_ratings=0):
+        """Converts record to JSON."""
+        if self.args.use_avg_seg_scores and (self.args.onlyMQM or self.args.onlyPSQM): 
+            logger.info('Using raw_score as the label!!!!!!!')
+            json_dict = {"year": year, "lang": lang, "source": src_segment, 
+                         "reference": ref_segment, "candidate": sys_segment, "z_rating": z_score,
+                         "rating": raw_score, "segment_id": seg_id, "system": sys_name,
+                         "n_ratings": n_ratings}
+            return json.dumps(json_dict)
+        else:
+            json_dict = {"year": year, "lang": lang, "source": src_segment, 
+                         "reference": ref_segment, "candidate": sys_segment, "raw_rating": raw_score,
+                         "rating": z_score, "segment_id": seg_id, "system": sys_name,
+                         "n_ratings": n_ratings}
+            return json.dumps(json_dict)
     
     def generate_records_for_lang(self, lang):
         """Consolidates all the files for a given language pair and year."""
@@ -1180,7 +1197,7 @@ class Importer20(Importer18):
                         logger.info("* Sys segment:" + sys_segment)
                         logger.info("* Parsed line:" + line)
                         logger.info("* Lang:" + lang)
-                    example = Importer18.to_json(self.year, lang, src_segment, 
+                    example = self.to_json(self.year, lang, src_segment, 
                                                  ref_segment, sys_segment, raw_score, 
                                                  z_score, seg_id, sys_name, n_ratings)
                     dest_file.write(example)
