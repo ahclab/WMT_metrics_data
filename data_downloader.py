@@ -992,7 +992,7 @@ class Importer20(Importer18):
                     logger.info("* Sys segment:" + sys_segment)
                     logger.info("* Parsed line:" + line)
                     logger.info("* Lang:" + lang)
-                example = Importer18.to_json(self.year, lang, src_segment, 
+                example = self.to_json(self.year, lang, src_segment, 
                                              ref_segment, sys_segment, raw_score, 
                                              z_score, seg_id, sys_name)
                 dest_file.write(example)
@@ -1094,7 +1094,7 @@ class Importer20(Importer18):
                     logger.info("* Sys segment:" + sys_segment)
                     logger.info("* Parsed line:" + line)
                     logger.info("* Lang:" + lang)
-                example = Importer18.to_json(self.year, lang, src_segment, 
+                example = self.to_json(self.year, lang, src_segment, 
                                              ref_segment, sys_segment, raw_score, 
                                              z_score, seg_id, sys_name)
                 dest_file.write(example)
@@ -1109,7 +1109,6 @@ class Importer20(Importer18):
                 raw_score, z_score, seg_id, sys_name, n_ratings=0):
         """Converts record to JSON."""
         if self.args.use_avg_seg_scores and (self.args.onlyMQM or self.args.onlyPSQM): 
-            logger.info('Using raw_score as the label!!!!!!!')
             json_dict = {"year": year, "lang": lang, "source": src_segment, 
                          "reference": ref_segment, "candidate": sys_segment, "z_rating": z_score,
                          "rating": raw_score, "segment_id": seg_id, "system": sys_name,
@@ -1197,7 +1196,7 @@ class Importer20(Importer18):
                         logger.info("* Sys segment:" + sys_segment)
                         logger.info("* Parsed line:" + line)
                         logger.info("* Lang:" + lang)
-                    example = self.to_json(self.year, lang, src_segment, 
+                    example = Importer18.to_json(self.year, lang, src_segment, 
                                                  ref_segment, sys_segment, raw_score, 
                                                  z_score, seg_id, sys_name, n_ratings)
                     dest_file.write(example)
