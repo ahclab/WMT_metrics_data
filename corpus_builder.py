@@ -57,6 +57,8 @@ parser.add_argument('--years', type=str, default='15,16,17,18,19,20', help='sepa
 parser.add_argument('--target_language', type=str, default='*', help='if only english, then \"en\"')
 parser.add_argument('--include_unreliables', type=bool_flag, default=False,
                     help='WMT20 has some unreliable data. This flag is set when including such data')
+parser.add_argument('--onlyDA', type=bool_flag, default=False, help='use full DA. if False no duplicates with MQM/PSQM will be added to DA')
+parser.add_argument('--priorMQM', type=bool_flag, default=True, help='if True prior MQM. if False prior PSQM')
 parser.add_argument('--onlyMQM', type=bool_flag, default=False, 
                     help='only download and preprocessing MQM data. When both of onlyMQM and onlyPSQM are False, download DA data on WMT20')
 parser.add_argument('--onlyPSQM', type=bool_flag, default=False, 

@@ -1130,7 +1130,13 @@ class Importer20(Importer18):
         elif self.onlyPSQM:
             n_records = self.generate_psqm_records_for_lang(lang)
             return n_records
-
+        
+        if self.args.priorMQM == False :
+            raise NotImplementedError
+        if lang in ['en-de', 'zh-en']:
+            _, MQMsegments = self.get_mqm_segments(lang)
+        
+        
         # Loads source, reference and system segments.
         src_segments, ref_segments = self.get_ref_segments(lang)
         sys_segments = self.get_sys_segments(lang)
@@ -1182,6 +1188,11 @@ class Importer20(Importer18):
                         sys_name = 'Huoshan_Translate.651'
                     if sys_name == 'HUMAN' and lang == 'km-en':
                         sys_name = 'Human-A.0'
+                    
+                    if self.args.priorMQM and self.args.onlyDA == False and lang in ['en-de', 'zh-en']:
+                        if (sys_name, seg_id) in MQMsegments:
+                            skipped_n_records += 1
+                            continue
                     
                     # The "-1" is necessary because seg_id starts counting at 1.
                     src_segment = src_segments[seg_id - 1]
