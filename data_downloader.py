@@ -57,7 +57,8 @@ WMT_LOCATIONS = {'15': {"eval_data": ("DAseg-wmt-newstest2015",
                  '20': {"submissions":("WMT20_data", "", "https://drive.google.com/drive/folders/1n_alr6WFQZfw4dcAmyxow4V8FC67XD8p"), 
                         "eval_data":("wmt20-metrics", "", "https://github.com/WMT-Metrics-task/wmt20-metrics"), 
                         "MQM":("wmt-mqm-human-evaluation", "", "https://github.com/google/wmt-mqm-human-evaluation"), 
-                        'PSQM':("wmt-mqm-human-evaluation", "", "https://github.com/google/wmt-mqm-human-evaluation")}}
+                        'PSQM':("wmt-mqm-human-evaluation", "", "https://github.com/google/wmt-mqm-human-evaluation")},
+                 '21':{'submissions':("WMT21-data", "", "")}}
 
 
 # In[3]:
@@ -1221,44 +1222,218 @@ class Importer20(Importer18):
     
 
 
+# In[10]:
+
+
+class Importer21(Importer18):
+    """Importer for WMT20 Metrics challenge."""
+    
+    def __init__(self, year, target_path, cache_path, args):
+        super(Importer21, self).__init__(year, target_path, cache_path, args)
+        self.args = args
+        self.tasks = ['challengeset', 'florestest2021', 'newstest2021', 'tedtalks']
+    
+    def open_tar(self, tar_path, open_dir):
+        logger.info("Untaring...")
+        tar = tarfile.open(tar_path)
+        tar.extractall(path=open_dir)
+        tar.close()
+        logger.info("Done.")
+    
+    def fetch_files(self):
+        """Downloads raw datafiles from various WMT sources."""
+        return
+#         cache = self.cache_path
+        
+#         if cache and not os.path.isdir(cache):
+#             logger.info("Initializing cache {}".format(cache))
+#             os.makedirs(cache)
+        
+#         for file_type in self.location_info:    
+#             folder_name, _, url = self.location_info[file_type]
+#             cache_untar_path = os.path.join(cache, folder_name)
+            
+#             if cache:
+#                 logger.info("Checking cached tar file {}.".format(cache_untar_path))
+#                 if os.path.exists(cache_untar_path) :
+#                     if file_type == 'submissions':
+#                         tars = os.path.join(cache_untar_path, '*.tar.gz')
+#                         tar_paths = glob.glob(tars)
+#                         untar_paths = [path.replace(".tar.gz", "", 1) for path in tar_paths]
+#                         for tar_path, untar_paths in zip(tar_paths, untar_paths):
+#                             if not os.path.exists(untar_paths):
+#                                 self.open_tar(tar_path, cache_untar_path)
+#                             else:
+#                                 logger.info("Cache and untar directory found, skipping")
+#                     else:
+#                         logger.info("Cache and untar directory found, skipping")
+#                     continue
+#             logger.info("File not found in cache.")
+#             if file_type == 'submissions':
+#                 logger.info("Cannot download {} with this script. Download from {}".format(folder_name, url))
+#                 exit(-1)
+#             logger.info("Downloading {} from {}".format(folder_name, url))
+#             git_clone(url, cache_untar_path)
+#             logger.info("Done.") 
+    
+    def parse_rating(self, rating_line, lang):
+        rating_tuple = tuple(rating_line.split(" "))
+        # I have a feeling that the last field is the number of ratings
+        # but I'm not 100% sure.
+        sys_name, seg_id, raw_score, z_score, n_ratings = rating_tuple
+        
+        # en-zh has unknown seg_id probablly tagged with other format name
+#         if lang in ['en-zh', 'en-ja', 'en-iu', 'en-cs', 'en-ta', 'en-ru', 'en-de', 'en-pl']:
+#             seg_id = seg_id.split('_')[-1] 
+        try:
+            seg_id = int(seg_id)
+            raw_score = float(raw_score)
+            z_score = float(z_score)
+            n_ratings = int(n_ratings)
+        except:
+            logger.info(lang)
+            logger.info(rating_line)
+        return sys_name, seg_id, raw_score, z_score, n_ratings
+
+    def parse_submission_file_name(self, fname, lang, task):
+        """Extracts system names from the name of submission files."""
+
+        # I added those rules to unblock the pipeline.
+
+        sys_name = fname.replace("{}.{}.{}.".format(task, lang, 'hyp'), "", 1).replace(".{}".format(lang.split('-')[-1]), "", 1)
+
+        return sys_name
+    
+    def parse_source_file_name(self, fname, task):
+        lang = fname.replace("{}.".format(task), "")
+        return lang[:5]
+    
+    def list_lang_pairs(self, task):
+        """List all language pairs included in the WMT files for 2020."""
+        
+        folder_name, _, _ = self.location_info["submissions"]
+        folder = os.path.join(self.temp_directory, folder_name, 'sources', '*')
+        all_full_paths = glob.glob(folder)
+        all_files = [os.path.basename(f) for f in all_full_paths if os.path.basename(f).startswith(task)]
+        cand_lang_pairs = [self.parse_source_file_name(fname, task) for fname in all_files]
+        # We need to remove None values in cand_lang_pair:
+        lang_pairs = [lang_pair for lang_pair in cand_lang_pairs if lang_pair]
+        return list(set(lang_pairs))
+
+    def get_ratings_path(self, lang, task):
+        folder, _, _ = self.location_info["eval_data"]
+
+        file_name = "ad-seg-scores-{}.csv".format(lang)
+        folder = os.path.join(self.temp_directory, folder, "manual-evaluation", "DA", "ad-seg-scores-*.csv")
+        all_files = glob.glob(folder)
+        for cand_file in all_files:
+            if cand_file.endswith(file_name):
+                return cand_file
+        raise ValueError("Can't find ratings for lang {}".format(lang))
+
+    def get_ref_segments(self, lang, task):
+        """Fetches source and reference translation segments for language pair."""
+        folder, _, _ = self.location_info["submissions"]
+        src_lang, tgt_lang = separate_lang_pair(lang)
+        src_subfolder = 'sources'
+        ref_subfolder = 'references'
+        src_file = "{}.{}-{}.src.{}".format(task, src_lang, tgt_lang, src_lang)
+        ref_file = "{}.{}-{}.ref.ref-A.{}".format(task, src_lang, tgt_lang, tgt_lang)
+        src_path = os.path.join(self.temp_directory, folder, src_subfolder, src_file)
+        ref_path = os.path.join(self.temp_directory, folder, ref_subfolder, ref_file)
+
+#         logger.info("Reading data from files {} and {}".format(src_path, ref_path))
+        with open(src_path, "r", encoding="utf-8") as f_src:
+            src_segments = f_src.readlines()
+        with open(ref_path, "r", encoding="utf-8") as f_ref:
+            ref_segments = f_ref.readlines()
+
+        src_segments = [postprocess_segment(s) for s in src_segments]
+        ref_segments = [postprocess_segment(s) for s in ref_segments]
+        return src_segments, ref_segments
+
+    def get_sys_segments(self, lang, task):
+        """Builds a dictionary with the generated segments for each system."""
+        # Gets all submission file paths.
+        folder_name, _, _ = self.location_info["submissions"]
+        subfolder = os.path.join("system-outputs", task)
+        folder = os.path.join(self.temp_directory, folder_name, subfolder, lang)
+        all_files = os.listdir(folder)
+#         logger.info("Reading submission files from {}".format(folder))
+
+        # Extracts the generated segments for each submission.
+        sys_segments = {}
+        for sys_file_name in all_files:
+            sys_name = self.parse_submission_file_name(sys_file_name, lang, task)
+            assert sys_name
+            sys_path = os.path.join(folder, sys_file_name)
+            with open(sys_path, "r", encoding="utf-8") as f_sys:
+                sys_lines = f_sys.readlines()
+                sys_lines = [postprocess_segment(s) for s in sys_lines]
+                sys_segments[sys_name] = sys_lines
+
+        return sys_segments
+    
+    def generate_records_for_lang(self, lang, task):
+        """Consolidates all the files for a given language pair and year."""
+        # Loads source, reference and system segments.
+        src_segments, ref_segments = self.get_ref_segments(lang, task)
+        sys_segments = self.get_sys_segments(lang, task)
+    
+        # Streams the rating file and performs the join on-the-fly.
+#         ratings_file_path = self.get_ratings_path(lang)
+#         logger.info("Reading file {}".format(ratings_file_path))
+        n_records = 0
+        skipped_n_records = 0
+#         if lang in ['en-zh', 'en-ja', 'en-iu', 'en-cs', 'en-ta', 'en-ru', 'en-de', 'en-pl'] and (not self.include_unreliables):
+#             return 0
+
+        with open(self.target_path, "a+") as dest_file:
+            for sys_name in sys_segments.keys():
+                for seg_id in range(len(src_segments)):
+                    src_segment = src_segments[seg_id]
+                    ref_segment = ref_segments[seg_id]
+                    sys_segment = sys_segments[sys_name][seg_id]
+                    example = Importer18.to_json(self.year, lang, src_segment, 
+                                                 ref_segment, sys_segment, 0.0, 
+                                                 0.0, seg_id, sys_name, 0)
+                    dest_file.write(example)
+                    dest_file.write("\n")
+                    n_records += 1
+        logger.info("Processed {} records of {}'s {}".format(str(n_records), self.year, lang))
+        logger.info("Skipped {} records of {}'s {}".format(str(skipped_n_records), self.year, lang))
+        return n_records
+    
+    
+    
+
+
+# In[11]:
+
+
+# importer = Importer21('21', 
+#                       '/home/ksudoh/kosuke-t/scripts/make_data/wmt_metrics_data/data/WMT21_test.json', 
+#                       '/home/ksudoh/kosuke-t/scripts/make_data/wmt_metrics_data/cache',
+#                       args=None)
+
+
 # In[12]:
-
-
-# importer = Importer20('20', 
-#                       '/home/is/kosuke-t/scripts/make_data/wmt_metrics_data/data/wmt2020_mqm.json', 
-#                       '/home/is/kosuke-t/scripts/make_data/wmt_metrics_data/cache',
-#                       args=None,
-#                       include_unreliables=False,
-#                       onlyMQM=False, 
-#                       onlyPSQM=False)
-
-
-# In[175]:
 
 
 # importer.fetch_files()
 
 
-# In[14]:
+# In[13]:
 
 
-# for lang in importer.list_lang_pairs():
-#     print(lang)
+# for task in importer.tasks:
+#     for lang in importer.list_lang_pairs(task):
+#         logger.info('{}, {}'.format(lang, task))
+#         importer.generate_records_for_lang(lang, task)
+# #         importer.generate_records_for_lang(lang, task)
 
 
-# In[59]:
-
-
-
-
-
-# In[35]:
-
-
-
-
-
-# In[10]:
+# In[142]:
 
 
 

@@ -24,7 +24,8 @@ WMT_IMPORTERS = {
     "17": data_downloader.Importer17,
     "18": data_downloader.Importer18,
     "19": data_downloader.Importer19,
-    "20": data_downloader.Importer20
+    "20": data_downloader.Importer20,
+    "21": data_downloader.Importer21,
 }
 
 
@@ -79,7 +80,7 @@ if args.addMQM:
 if args.addPSQM:
     assert (not args.onlyMQM) and (not args.onlyPSQM) and (not args.addMQM) ,    'addPSQM can stand only when other signals are off' 
 
-if '20' in args.years:
+if '20' in args.years or '21' in args.years:
     assert os.path.isdir(args.downloaded_dir), 'Fetching 20\'s data cannot be completed with this script.\n'    'Download submission data from {} beforhand.\n'    'Then, put the data folder inside the downloaded_dir of the arguments.'.format(data_downloader.WMT_LOCATIONS['20']['submissions'][-1])
 
 
@@ -107,6 +108,12 @@ def create_wmt_dataset(target_file, rating_years, target_language):
             logger.info('copying 20\'s data to tmp directory...')
             before_copy = os.path.join(args.downloaded_dir, data_downloader.WMT_LOCATIONS['20']['submissions'][0])
             after_copy = os.path.join(tmpdir, data_downloader.WMT_LOCATIONS['20']['submissions'][0])
+            shutil.copytree(before_copy, after_copy)
+            logger.info('Done.')
+        if '21' in rating_years:
+            logger.info('copying 21\'s data to tmp directory...')
+            before_copy = os.path.join(args.downloaded_dir, data_downloader.WMT_LOCATIONS['21']['submissions'][0])
+            after_copy = os.path.join(tmpdir, data_downloader.WMT_LOCATIONS['21']['submissions'][0])
             shutil.copytree(before_copy, after_copy)
             logger.info('Done.')
         
